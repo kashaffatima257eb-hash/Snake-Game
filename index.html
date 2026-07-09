@@ -1,29 +1,104 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snake Game</title>
+    <title>SnakeX</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-<div class="container">
+<div class="wrapper">
 
-    <h1>🐍 Snake Game</h1>
+    <header>
+        <h1>🐍 SnakeX</h1>
+        <p>Classic Snake. Modern Experience.</p>
+    </header>
 
-    <div class="score">
-        Score :
-        <span id="score">0</span>
-    </div>
+    <main>
 
-    <canvas id="game" width="400" height="400"></canvas>
+        <section class="game-area">
 
-    <button id="restart">Restart</button>
+            <canvas
+                id="gameCanvas"
+                width="600"
+                height="600">
+            </canvas>
+
+        </section>
+
+        <aside class="sidebar">
+
+            <div class="card">
+                <h3>Score</h3>
+                <span id="score">0</span>
+            </div>
+
+            <div class="card">
+                <h3>Best</h3>
+                <span id="best">0</span>
+            </div>
+
+            <div class="card">
+
+                <h3>Difficulty</h3>
+
+                <select id="difficulty">
+
+                    <option>Easy</option>
+                    <option selected>Medium</option>
+                    <option>Hard</option>
+
+                </select>
+
+            </div>
+
+            <button id="playBtn">▶ Play</button>
+
+            <button id="pauseBtn">⏸ Pause</button>
+
+            <button id="restartBtn">🔄 Restart</button>
+
+            <div class="card controls">
+
+                <h3>Controls</h3>
+
+                <p>↑ ↓ ← →</p>
+
+            </div>
+
+        </aside>
+
+    </main>
 
 </div>
+<div id="gameOverModal" class="modal hidden">
 
+    <div class="modal-content">
+
+        <h2>💀 GAME OVER</h2>
+
+        <p>
+            Score :
+            <span id="finalScore">0</span>
+        </p>
+
+        <p>
+            Best :
+            <span id="finalBest">0</span>
+        </p>
+
+        <button id="playAgainBtn">
+            ▶ Play Again
+        </button>
+
+    </div>
+
+</div>
 <script src="script.js"></script>
 
 </body>
+
 </html>
