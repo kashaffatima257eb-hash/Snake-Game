@@ -1,14 +1,21 @@
 // ============================
-// SnakeX - Step 3
-// Snake Movement
+// SnakeX - Enhanced
+// Snake Movement + Buffered Input, Pause Overlay,
+// Food Pulse Animation, Sound Effects, Touch Controls
 // ============================
 
 // Canvas
+let foodPulse = 0;
+const difficulty = document.getElementById("difficulty");
 const modal = document.getElementById("gameOverModal");
 
 const finalScore = document.getElementById("finalScore");
 
 const finalBest = document.getElementById("finalBest");
+
+const newBestBadge = document.getElementById("newBestBadge");
+
+const soundBtn = document.getElementById("soundBtn");
 
 const playAgainBtn = document.getElementById("playAgainBtn");
 const canvas = document.getElementById("gameCanvas");
@@ -51,6 +58,81 @@ let food = {
 // Direction
 let dx = 1;
 let dy = 0;
+
+// Buffered inputs (prevents illegal reversal when
+// two keys are pressed quickly between game ticks)
+let directionQueue = [];
+
+// Whether the game is currently paused mid-run
+let isPaused = false;
+
+// Sound
+let isMuted = localStorage.getItem("snakeMuted") === "true";
+
+soundBtn.textContent = isMuted ? "🔇 Sound" : "🔊 Sound";
+
+let audioCtx = null;
+
+// ============================
+// Sound Effects
+// ============================
+
+function beep(freq, duration, waveType = "sine") {
+
+    if (isMuted) return;
+
+    try {
+
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        // Browsers auto-suspend AudioContext until it's resumed inside
+        // a direct user gesture. The eat/game-over sounds fire from the
+        // game loop (a timer), not a click, so resume it here.
+        if (audioCtx.state === "suspended") {
+            audioCtx.resume();
+        }
+
+        const oscillator = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        oscillator.type = waveType;
+        oscillator.frequency.value = freq;
+
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+        oscillator.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + duration);
+
+    } catch (err) {
+
+        console.error("SnakeX sound error:", err);
+
+    }
+
+}
+
+function playEatSound() {
+    beep(660, 0.12);
+}
+
+function playGameOverSound() {
+
+    // Retro 8-bit style descending death jingle
+    const notes = [392, 330, 262, 196]; // G4, E4, C4, G3
+
+    notes.forEach((freq, i) => {
+
+        setTimeout(() => beep(freq, 0.18, "sawtooth"), i * 120);
+
+    });
+
+}
 
 // ============================
 // Draw Background
@@ -169,6 +251,10 @@ function drawSnake() {
 
 function drawFood() {
 
+    foodPulse += 0.12;
+
+    const pulseRadius = 8 + Math.sin(foodPulse) * 1.5;
+
     ctx.shadowColor = "#FF5D73";
     ctx.shadowBlur = 20;
 
@@ -180,7 +266,7 @@ function drawFood() {
     ctx.arc(
         food.x * CELL_SIZE + CELL_SIZE / 2,
         food.y * CELL_SIZE + CELL_SIZE / 2,
-        8,
+        pulseRadius,
         0,
         Math.PI * 2
     );
@@ -207,10 +293,33 @@ function drawFood() {
 }
 
 // ============================
+// Process Buffered Input
+// ============================
+
+function processQueue() {
+
+    while (directionQueue.length > 0) {
+
+        const next = directionQueue.shift();
+
+        // Ignore a move that reverses straight into the snake
+        if (next.dx !== -dx || next.dy !== -dy) {
+            dx = next.dx;
+            dy = next.dy;
+            break;
+        }
+
+    }
+
+}
+
+// ============================
 // Move Snake
 // ============================
 
 function moveSnake() {
+
+    processQueue();
 
     const head = {
 
@@ -234,6 +343,14 @@ function moveSnake() {
     if (head.x === food.x && head.y === food.y) {
 
         score.textContent = Number(score.textContent) + 1;
+
+        score.classList.remove("pop");
+
+        void score.offsetWidth; // restart animation
+
+        score.classList.add("pop");
+
+        playEatSound();
 
         spawnFood();
 
@@ -322,15 +439,21 @@ function gameOver() {
 
     gameLoop = null;
 
+    playGameOverSound();
+
     const current = Number(score.textContent);
 
     let high = Number(localStorage.getItem("snakeBest")) || 0;
+
+    let isNewBest = false;
 
     if(current > high){
 
         high = current;
 
         localStorage.setItem("snakeBest", high);
+
+        isNewBest = true;
 
     }
 
@@ -340,9 +463,37 @@ function gameOver() {
 
     finalBest.textContent = high;
 
+    newBestBadge.classList.toggle("hidden", !isNewBest);
+
     modal.classList.remove("hidden");
 
+    playBtn.disabled = false;
+
+    pauseBtn.disabled = true;
+
 }
+// ============================
+// Draw Pause Overlay
+// ============================
+
+function drawPauseOverlay() {
+
+    ctx.fillStyle = "rgba(16,24,39,.7)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 36px Segoe UI, Arial, sans-serif";
+    ctx.textAlign = "center";
+
+    ctx.fillText("⏸ PAUSED", canvas.width / 2, canvas.height / 2);
+
+    ctx.font = "16px Segoe UI, Arial, sans-serif";
+    ctx.fillStyle = "#94a3b8";
+
+    ctx.fillText("Press Space or ▶ Play to resume", canvas.width / 2, canvas.height / 2 + 30);
+
+}
+
 // ============================
 // Render
 // ============================
@@ -354,7 +505,24 @@ function render() {
     drawFood();
     drawSnake();
 
+    if (isPaused) drawPauseOverlay();
+
 }
+
+// ============================
+// Idle Animation (keeps food glow pulsing smoothly
+// even while the snake isn't moving)
+// ============================
+
+function idleAnimate() {
+
+    render();
+
+    requestAnimationFrame(idleAnimate);
+
+}
+
+requestAnimationFrame(idleAnimate);
 
 // ============================
 // Update Game
@@ -368,32 +536,97 @@ function update() {
 }
 
 // ============================
+// Audio Unlock (some browsers only allow the very
+// first user gesture on the page to unlock audio,
+// not necessarily the Play button click)
+// ============================
+
+function unlockAudioOnce() {
+
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    if (audioCtx.state === "suspended") {
+        audioCtx.resume();
+    }
+
+    document.removeEventListener("pointerdown", unlockAudioOnce);
+    document.removeEventListener("keydown", unlockAudioOnce);
+
+}
+
+document.addEventListener("pointerdown", unlockAudioOnce);
+document.addEventListener("keydown", unlockAudioOnce);
+
+// ============================
 // Controls
 // ============================
 
+const KEY_DIRECTIONS = {
+    ArrowUp:    { dx: 0, dy: -1 },
+    ArrowDown:  { dx: 0, dy: 1 },
+    ArrowLeft:  { dx: -1, dy: 0 },
+    ArrowRight: { dx: 1, dy: 0 },
+    w: { dx: 0, dy: -1 },
+    s: { dx: 0, dy: 1 },
+    a: { dx: -1, dy: 0 },
+    d: { dx: 1, dy: 0 }
+};
+
 document.addEventListener("keydown", (e) => {
 
-    if (e.key === "ArrowUp" && dy !== 1) {
-        dx = 0;
-        dy = -1;
+    if (e.key === " ") {
+
+        e.preventDefault();
+
+        if (gameLoop !== null) pauseBtn.click();
+        else if (!playBtn.disabled) playBtn.click();
+
+        return;
+
     }
 
-    if (e.key === "ArrowDown" && dy !== -1) {
-        dx = 0;
-        dy = 1;
-    }
+    const move = KEY_DIRECTIONS[e.key];
 
-    if (e.key === "ArrowLeft" && dx !== 1) {
-        dx = -1;
-        dy = 0;
-    }
-
-    if (e.key === "ArrowRight" && dx !== -1) {
-        dx = 1;
-        dy = 0;
+    if (move && directionQueue.length < 2) {
+        directionQueue.push(move);
     }
 
 });
+
+// ============================
+// Touch Controls (swipe)
+// ============================
+
+let touchStartX = 0;
+let touchStartY = 0;
+
+canvas.addEventListener("touchstart", (e) => {
+
+    touchStartX = e.changedTouches[0].clientX;
+    touchStartY = e.changedTouches[0].clientY;
+
+}, { passive: true });
+
+canvas.addEventListener("touchend", (e) => {
+
+    const dxTouch = e.changedTouches[0].clientX - touchStartX;
+    const dyTouch = e.changedTouches[0].clientY - touchStartY;
+
+    if (Math.abs(dxTouch) < 20 && Math.abs(dyTouch) < 20) return;
+
+    let move;
+
+    if (Math.abs(dxTouch) > Math.abs(dyTouch)) {
+        move = dxTouch > 0 ? KEY_DIRECTIONS.ArrowRight : KEY_DIRECTIONS.ArrowLeft;
+    } else {
+        move = dyTouch > 0 ? KEY_DIRECTIONS.ArrowDown : KEY_DIRECTIONS.ArrowUp;
+    }
+
+    if (directionQueue.length < 2) directionQueue.push(move);
+
+}, { passive: true });
 
 // ============================
 // Buttons
@@ -403,7 +636,40 @@ playBtn.onclick = () => {
 
     if (gameLoop !== null) return;
 
-    gameLoop = setInterval(update,150);
+    // Create/resume the AudioContext here since this click is a
+    // genuine user gesture — browsers require that before audio
+    // will actually play.
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === "suspended") {
+        audioCtx.resume();
+    }
+
+    let speed = 150;
+
+switch (difficulty.value) {
+
+    case "Easy":
+        speed = 220;
+        break;
+
+    case "Medium":
+        speed = 150;
+        break;
+
+    case "Hard":
+        speed = 90;
+        break;
+
+}
+
+gameLoop = setInterval(update, speed);
+
+isPaused = false;
+
+playBtn.disabled = true;
+pauseBtn.disabled = false;
 
 };
 
@@ -412,6 +678,11 @@ pauseBtn.onclick = () => {
     clearInterval(gameLoop);
     gameLoop = null;
 
+    isPaused = true;
+
+    playBtn.disabled = false;
+    pauseBtn.disabled = true;
+
 };
 
 restartBtn.onclick = () => {
@@ -419,6 +690,10 @@ restartBtn.onclick = () => {
     clearInterval(gameLoop);
 
     gameLoop = null;
+
+    isPaused = false;
+
+    directionQueue = [];
 
     snake = [
 
@@ -444,11 +719,31 @@ restartBtn.onclick = () => {
 
     score.textContent = 0;
 
+    newBestBadge.classList.add("hidden");
+
+    playBtn.disabled = false;
+    pauseBtn.disabled = true;
+
     render();
 
 };
 
+// ============================
+// Sound Toggle
+// ============================
+
+soundBtn.onclick = () => {
+
+    isMuted = !isMuted;
+
+    localStorage.setItem("snakeMuted", isMuted);
+
+    soundBtn.textContent = isMuted ? "🔇 Sound" : "🔊 Sound";
+
+};
+
 // Initial Draw
+pauseBtn.disabled = true;
 render();
 playAgainBtn.onclick = () => {
 

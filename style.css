@@ -178,6 +178,28 @@ button:hover{
 
 }
 
+button:disabled{
+
+    opacity:.4;
+
+    cursor:not-allowed;
+
+    transform:none;
+
+    box-shadow:none;
+
+}
+
+.controls p{
+
+    margin-top:6px;
+
+    color:#94a3b8;
+
+    font-size:14px;
+
+}
+
 .controls{
 
     text-align:center;
@@ -248,5 +270,43 @@ button:hover{
     margin-top:25px;
 
     width:100%;
+
+}
+
+#newBestBadge{
+
+    color:#FFD166;
+
+    font-weight:700;
+
+    font-size:18px;
+
+    margin-top:10px;
+
+    animation: pulseBadge 1s ease-in-out infinite;
+
+}
+
+@keyframes pulseBadge{
+
+    0%, 100% { transform: scale(1); }
+
+    50% { transform: scale(1.08); }
+
+}
+
+#score.pop{
+
+    animation: scorePop .25s ease;
+
+}
+
+@keyframes scorePop{
+
+    0% { transform: scale(1); color:#53F28C; }
+
+    50% { transform: scale(1.4); color:#53F28C; }
+
+    100% { transform: scale(1); }
 
 }
